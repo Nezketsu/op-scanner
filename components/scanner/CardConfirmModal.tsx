@@ -38,7 +38,9 @@ export function CardConfirmModal({ cardNumber, onClose }: CardConfirmModalProps)
     const result = await addCard(selectedCard.id, null)
     setAdding(false)
     if (result?.error) {
-      setError("Impossible d'ajouter cette carte à la collection")
+      const errorMsg = result.error instanceof Error ? result.error.message : 'Erreur inconnue'
+      setError(`Erreur: ${errorMsg}`)
+      console.error('Ajout échoué:', result.error)
       return
     }
     onClose()

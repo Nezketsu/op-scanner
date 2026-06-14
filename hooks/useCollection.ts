@@ -36,7 +36,8 @@ export function useCollection() {
       )
 
     if (error) {
-      return { error }
+      console.error('Erreur upsert collection:', error)
+      return { error: new Error(error.message || 'Erreur lors de l\'ajout') }
     }
 
     await loadCollection()
