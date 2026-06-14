@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react'
 import { Viewfinder } from '@/components/scanner/Viewfinder'
 import { CardConfirmModal } from '@/components/scanner/CardConfirmModal'
 import { useScanner } from '@/hooks/useScanner'
-import { validateCardCode } from '@/lib/tcgdex'
 
 const CARD_FORMAT = /^[A-Z]{1,3}\d{1,2}-\d{3}[a-z]?$/i
 
@@ -11,7 +10,6 @@ export default function ScanPage() {
   const { videoRef, startCamera, stopCamera, captureFrame, processImage, scanResult, scanning, error, reset } = useScanner()
   const [manualInput, setManualInput] = useState('')
   const [activeCard, setActiveCard] = useState<string | null>(null)
-  const [validating, setValidating] = useState(false)
 
   useEffect(() => {
     startCamera()
@@ -23,24 +21,14 @@ export default function ScanPage() {
     if (frame) await processImage(frame)
   }
 
-  // When OCR detects a card number, validate it against TCGDex sets
   useEffect(() => {
-    if (!scanResult?.cardNumber) return
-    setManualInput(scanResult.cardNumber)
-
-    const validate = async () => {
-      setValidating(true)
-      const isValid = await validateCardCode(scanResult.cardNumber)
-      if (isValid) {
-        setActiveCard(scanResult.cardNumber)
-      }
-      // If invalid, just pre-fill the input so user can correct manually
-      setValidating(false)
+    if (scanResult?.cardNumber) {
+      setManualInput(scanResult.cardNumber)
+      setActiveCard(scanResult.cardNumber)
     }
-    validate()
   }, [scanResult])
 
-  const handleManualSearch = async () => {
+  const handleManualSearch = () => {
     const trimmed = manualInput.trim().toUpperCase()
     if (CARD_FORMAT.test(trimmed)) {
       setActiveCard(trimmed)
@@ -58,11 +46,9 @@ export default function ScanPage() {
       <div className="flex-1 relative min-h-0">
         <Viewfinder videoRef={videoRef} onCapture={handleCapture} />
 
-        {(scanning || validating) && (
+        {scanning && (
           <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-            <div className="bg-white px-6 py-4 rounded-xl text-sm font-medium">
-              {scanning ? 'Analyse en cours...' : 'Validation...'}
-            </div>
+            <div className="bg-white px-6 py-4 rounded-xl text-sm font-medium">Analyse en cours...</div>
           </div>
         )}
 
@@ -78,7 +64,6 @@ export default function ScanPage() {
         )}
       </div>
 
-      {/* Bottom panel */}
       <div className="bg-white/95 backdrop-blur px-4 pt-3 pb-6">
         <p className="text-xs text-gray-400 mb-2 text-center">
           Code détecté par scan ou saisi manuellement
