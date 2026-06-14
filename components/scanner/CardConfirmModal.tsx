@@ -39,7 +39,7 @@ export function CardConfirmModal({ cardNumber, onClose }: CardConfirmModalProps)
   }
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl p-5 max-h-[85vh] overflow-y-auto shadow-2xl z-[60]">
+    <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl p-5 pb-24 max-h-[85vh] overflow-y-auto shadow-2xl z-[60]">
       <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4" />
 
       {loading && <p className="text-center text-gray-500">Chargement...</p>}
