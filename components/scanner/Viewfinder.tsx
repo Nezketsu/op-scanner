@@ -24,8 +24,11 @@ export function Viewfinder({ videoRef, onCapture }: ViewfinderProps) {
         <div className="absolute top-0 right-0 w-5 h-5 border-t-4 border-r-4 border-white rounded-tr-lg" />
         <div className="absolute bottom-0 left-0 w-5 h-5 border-b-4 border-l-4 border-white rounded-bl-lg" />
         <div className="absolute bottom-0 right-0 w-5 h-5 border-b-4 border-r-4 border-white rounded-br-lg" />
-        <p className="absolute -top-6 left-0 right-0 text-center text-white text-xs font-medium">
-          Aligner le numéro ici (ex : OP01-001)
+        <p className="absolute -top-7 left-0 right-0 text-center text-white text-xs font-semibold drop-shadow">
+          Scanner le code de la carte
+        </p>
+        <p className="absolute -top-3 left-0 right-0 text-center text-white/70 text-xs drop-shadow">
+          ex : OP01-001, ST01-002, EB01-003
         </p>
       </div>
 

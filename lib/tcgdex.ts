@@ -1,4 +1,4 @@
-import type { Card, Set } from '@/types'
+import type { Card, Set as CardSet } from '@/types'
 
 const BASE_URL = 'https://api.tcgdex.net/v2/en'
 
@@ -61,7 +61,35 @@ export async function getCardById(cardId: string): Promise<Card | null> {
   }
 }
 
-export async function getSets(): Promise<Set[]> {
+// In-memory cache so we don't refetch on every scan
+let knownSetIds: Set<string> | null = null
+
+export async function getKnownSetIds(): Promise<Set<string>> {
+  if (knownSetIds) return knownSetIds
+  try {
+    const res = await fetch(`${BASE_URL}/sets`)
+    if (!res.ok) return new Set()
+    const data: TCGDexSet[] = await res.json()
+    knownSetIds = new Set(
+      data
+        .filter(s => s.id.startsWith('OP') || s.id.startsWith('ST') || s.id.startsWith('EB'))
+        .map(s => s.id)
+    )
+    return knownSetIds
+  } catch {
+    return new Set()
+  }
+}
+
+export async function validateCardCode(cardCode: string): Promise<boolean> {
+  const parts = cardCode.split('-')
+  if (parts.length !== 2) return false
+  const setId = parts[0]
+  const ids = await getKnownSetIds()
+  return ids.has(setId)
+}
+
+export async function getSets(): Promise<CardSet[]> {
   try {
     const res = await fetch(`${BASE_URL}/sets`)
     if (!res.ok) return []

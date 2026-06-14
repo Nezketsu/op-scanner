@@ -3,13 +3,15 @@ import { useEffect, useState } from 'react'
 import { Viewfinder } from '@/components/scanner/Viewfinder'
 import { CardConfirmModal } from '@/components/scanner/CardConfirmModal'
 import { useScanner } from '@/hooks/useScanner'
+import { validateCardCode } from '@/lib/tcgdex'
 
 const CARD_FORMAT = /^[A-Z]{1,3}\d{1,2}-\d{3}[a-z]?$/i
 
 export default function ScanPage() {
   const { videoRef, startCamera, stopCamera, captureFrame, processImage, scanResult, scanning, error, reset } = useScanner()
   const [manualInput, setManualInput] = useState('')
-  const [manualCard, setManualCard] = useState<string | null>(null)
+  const [activeCard, setActiveCard] = useState<string | null>(null)
+  const [validating, setValidating] = useState(false)
 
   useEffect(() => {
     startCamera()
@@ -21,35 +23,46 @@ export default function ScanPage() {
     if (frame) await processImage(frame)
   }
 
-  // When OCR finds a result, pre-fill the manual input
+  // When OCR detects a card number, validate it against TCGDex sets
   useEffect(() => {
-    if (scanResult) setManualInput(scanResult.cardNumber)
+    if (!scanResult?.cardNumber) return
+    setManualInput(scanResult.cardNumber)
+
+    const validate = async () => {
+      setValidating(true)
+      const isValid = await validateCardCode(scanResult.cardNumber)
+      if (isValid) {
+        setActiveCard(scanResult.cardNumber)
+      }
+      // If invalid, just pre-fill the input so user can correct manually
+      setValidating(false)
+    }
+    validate()
   }, [scanResult])
 
-  const handleManualSearch = () => {
+  const handleManualSearch = async () => {
     const trimmed = manualInput.trim().toUpperCase()
     if (CARD_FORMAT.test(trimmed)) {
-      setManualCard(trimmed)
+      setActiveCard(trimmed)
     }
   }
 
   const handleClose = () => {
     reset()
-    setManualCard(null)
+    setActiveCard(null)
     setManualInput('')
   }
 
-  const activeCard = manualCard ?? (scanResult?.cardNumber ?? null)
-
   return (
     <div className="fixed inset-0 flex flex-col bg-black">
-      {/* Camera — takes up remaining space above the bottom panel */}
       <div className="flex-1 relative min-h-0">
         <Viewfinder videoRef={videoRef} onCapture={handleCapture} />
 
-        {scanning && (
+        {(scanning || validating) && (
           <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-            <div className="bg-white px-6 py-4 rounded-xl text-sm font-medium">Analyse en cours...</div>
+            <div className="bg-white px-6 py-4 rounded-xl text-sm font-medium">
+              {scanning ? 'Analyse en cours...' : 'Validation...'}
+            </div>
           </div>
         )}
 
@@ -65,10 +78,10 @@ export default function ScanPage() {
         )}
       </div>
 
-      {/* Bottom panel — always visible for manual input */}
-      <div className="bg-white/95 backdrop-blur px-4 pt-3 pb-6 safe-area-inset-bottom">
+      {/* Bottom panel */}
+      <div className="bg-white/95 backdrop-blur px-4 pt-3 pb-6">
         <p className="text-xs text-gray-400 mb-2 text-center">
-          Numéro détecté par OCR ou saisi manuellement (ex : OP01-001)
+          Code détecté par scan ou saisi manuellement
         </p>
         <div className="flex gap-2">
           <input
