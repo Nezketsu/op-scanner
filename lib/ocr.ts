@@ -1,121 +1,111 @@
 import type { ScanResult } from '@/types'
 
-// Matches OP01-001, ST01-001, EB01-001 with common OCR substitutions (O↔0, l↔1, .↔-)
 const CARD_NUMBER_REGEX = /\b([A-Z]{1,3}[\dO]{1,2}[-.][O\d]{3}[a-z]?)\b/i
-
-let workerInstance: Awaited<ReturnType<typeof import('tesseract.js').createWorker>> | null = null
-
-async function getWorker() {
-  if (!workerInstance) {
-    const { createWorker } = await import('tesseract.js')
-    workerInstance = await createWorker('eng')
-    await workerInstance.setParameters({
-      tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-',
-      tessedit_pageseg_mode: '7' as never,
-    })
-  }
-  return workerInstance
-}
 
 export function extractCardNumber(text: string): string | null {
   const normalized = text
     .toUpperCase()
     .replace(/\./g, '-')
     .replace(/[Il]/g, '1')
-
   const match = normalized.match(CARD_NUMBER_REGEX)
-  if (!match) return null
-
-  return match[1].toUpperCase().replace('.', '-')
+  return match ? match[1].toUpperCase().replace('.', '-') : null
 }
 
-function preprocessRegion(
-  img: HTMLImageElement,
-  xRatio: number,
-  yRatio: number,
-  wRatio: number,
-  hRatio: number,
-  scale = 4
-): string {
-  const canvas = document.createElement('canvas')
-  const srcX = img.width * xRatio
-  const srcY = img.height * yRatio
-  const srcW = img.width * wRatio
-  const srcH = img.height * hRatio
-
-  canvas.width = srcW * scale
-  canvas.height = srcH * scale
-
-  const ctx = canvas.getContext('2d')!
-  ctx.imageSmoothingEnabled = true
-  ctx.imageSmoothingQuality = 'high'
-  ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, canvas.width, canvas.height)
-
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-  const d = imageData.data
-  for (let i = 0; i < d.length; i += 4) {
-    const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
-    const val = gray > 140 ? 255 : 0
-    d[i] = d[i + 1] = d[i + 2] = val
-  }
-  ctx.putImageData(imageData, 0, 0)
-
-  return canvas.toDataURL('image/png')
-}
-
-async function tryRecognize(
-  worker: Awaited<ReturnType<typeof import('tesseract.js').createWorker>>,
-  imageData: string
-): Promise<{ cardNumber: string | null; rawText: string }> {
-  const { data } = await worker.recognize(imageData)
-  return { cardNumber: extractCardNumber(data.text), rawText: data.text }
-}
-
-export async function recognizeCardNumber(imageData: string): Promise<ScanResult | null> {
-  const worker = await getWorker()
-  const allRawTexts: string[] = []
-
-  return new Promise((resolve) => {
+// Crop bottom 22% of image and upscale 3x for better recognition
+function preprocessForOcr(imageData: string): Promise<string> {
+  return new Promise(resolve => {
     const img = new Image()
-    img.onload = async () => {
-      // Strategy 1: bottom-left 40%, bottom 18% (card number zone)
-      const bottomLeft = preprocessRegion(img, 0, 0.82, 0.45, 0.18)
-      const r1 = await tryRecognize(worker, bottomLeft)
-      allRawTexts.push(`[BL] ${r1.rawText.trim()}`)
-      if (r1.cardNumber) {
-        resolve({ cardNumber: r1.cardNumber, confidence: 0.9, rawText: allRawTexts.join('\n') })
-        return
+    img.onload = () => {
+      const scale = 3
+      const srcY = img.height * 0.78
+      const srcH = img.height * 0.22
+      const canvas = document.createElement('canvas')
+      canvas.width = img.width * scale
+      canvas.height = srcH * scale
+      const ctx = canvas.getContext('2d')!
+      ctx.imageSmoothingEnabled = true
+      ctx.imageSmoothingQuality = 'high'
+      ctx.drawImage(img, 0, srcY, img.width, srcH, 0, 0, canvas.width, canvas.height)
+      // Grayscale + binarize
+      const d = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      for (let i = 0; i < d.data.length; i += 4) {
+        const gray = 0.299 * d.data[i] + 0.587 * d.data[i + 1] + 0.114 * d.data[i + 2]
+        const val = gray > 140 ? 255 : 0
+        d.data[i] = d.data[i + 1] = d.data[i + 2] = val
       }
-
-      // Strategy 2: full bottom 22%
-      const bottomStrip = preprocessRegion(img, 0, 0.78, 1, 0.22)
-      const r2 = await tryRecognize(worker, bottomStrip)
-      allRawTexts.push(`[BS] ${r2.rawText.trim()}`)
-      if (r2.cardNumber) {
-        resolve({ cardNumber: r2.cardNumber, confidence: 0.75, rawText: allRawTexts.join('\n') })
-        return
-      }
-
-      // Strategy 3: full image, PSM 11
-      await worker.setParameters({ tessedit_pageseg_mode: '11' as never })
-      const r3 = await tryRecognize(worker, imageData)
-      await worker.setParameters({ tessedit_pageseg_mode: '7' as never })
-      allRawTexts.push(`[FULL] ${r3.rawText.trim()}`)
-      if (r3.cardNumber) {
-        resolve({ cardNumber: r3.cardNumber, confidence: 0.5, rawText: allRawTexts.join('\n') })
-        return
-      }
-
-      // Nothing found — still return raw text for debug
-      resolve({ cardNumber: '', confidence: 0, rawText: allRawTexts.join('\n') })
+      ctx.putImageData(d, 0, 0)
+      resolve(canvas.toDataURL('image/jpeg', 0.95))
     }
     img.src = imageData
   })
 }
 
+async function recognizeWithHuggingFace(imageData: string): Promise<{ cardNumber: string | null; rawText: string }> {
+  const response = await fetch('/api/ocr', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image: imageData }),
+  })
+  if (!response.ok) throw new Error(`OCR API error: ${response.status}`)
+  const data = await response.json()
+  return { cardNumber: data.cardNumber ?? null, rawText: data.rawText ?? '' }
+}
+
+// Tesseract fallback (kept for offline / rate-limit cases)
+let tesseractWorker: Awaited<ReturnType<typeof import('tesseract.js').createWorker>> | null = null
+
+async function recognizeWithTesseract(imageData: string): Promise<{ cardNumber: string | null; rawText: string }> {
+  if (!tesseractWorker) {
+    const { createWorker } = await import('tesseract.js')
+    tesseractWorker = await createWorker('eng')
+    await tesseractWorker.setParameters({
+      tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-',
+      tessedit_pageseg_mode: '7' as never,
+    })
+  }
+  const { data } = await tesseractWorker.recognize(imageData)
+  return { cardNumber: extractCardNumber(data.text), rawText: data.text }
+}
+
+export async function recognizeCardNumber(imageData: string): Promise<ScanResult | null> {
+  const cropped = await preprocessForOcr(imageData)
+  const allLogs: string[] = []
+
+  // Primary: HuggingFace TrOCR
+  try {
+    const hf = await recognizeWithHuggingFace(cropped)
+    allLogs.push(`[HF-cropped] ${hf.rawText.trim()}`)
+    if (hf.cardNumber) {
+      return { cardNumber: hf.cardNumber, confidence: 0.9, rawText: allLogs.join('\n') }
+    }
+
+    // Try with full image if cropped didn't work
+    const hfFull = await recognizeWithHuggingFace(imageData)
+    allLogs.push(`[HF-full] ${hfFull.rawText.trim()}`)
+    if (hfFull.cardNumber) {
+      return { cardNumber: hfFull.cardNumber, confidence: 0.75, rawText: allLogs.join('\n') }
+    }
+  } catch (err) {
+    allLogs.push(`[HF error] ${String(err)}`)
+  }
+
+  // Fallback: Tesseract local
+  try {
+    const t = await recognizeWithTesseract(cropped)
+    allLogs.push(`[Tesseract] ${t.rawText.trim()}`)
+    if (t.cardNumber) {
+      return { cardNumber: t.cardNumber, confidence: 0.5, rawText: allLogs.join('\n') }
+    }
+  } catch (err) {
+    allLogs.push(`[Tesseract error] ${String(err)}`)
+  }
+
+  return { cardNumber: '', confidence: 0, rawText: allLogs.join('\n') }
+}
+
 export async function terminateWorker() {
-  if (workerInstance) {
-    await workerInstance.terminate()
-    workerInstance = null
+  if (tesseractWorker) {
+    await tesseractWorker.terminate()
+    tesseractWorker = null
   }
 }
