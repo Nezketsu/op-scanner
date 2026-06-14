@@ -1,7 +1,7 @@
 import type { ScanResult } from '@/types'
 
-// Accepts OCR mistakes: O↔0, l↔1, dots instead of dashes
-const CARD_NUMBER_REGEX = /\b([A-Z]{1,3}[\dO]{1,2}[-.][\dOl]{3}[a-z]?)\b/i
+// Matches OP01-001, ST01-001, EB01-001 with common OCR substitutions (O↔0, l↔1, .↔-)
+const CARD_NUMBER_REGEX = /\b([A-Z]{1,3}[\dO]{1,2}[-.][O\d]{3}[a-z]?)\b/i
 
 let workerInstance: Awaited<ReturnType<typeof import('tesseract.js').createWorker>> | null = null
 
@@ -10,65 +10,97 @@ async function getWorker() {
     const { createWorker } = await import('tesseract.js')
     workerInstance = await createWorker('eng')
     await workerInstance.setParameters({
-      tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-/',
-      // PSM 11 = sparse text, good for finding a code anywhere in the image
-      tessedit_pageseg_mode: '11' as never,
+      tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-',
+      tessedit_pageseg_mode: '7' as never, // Single text line
     })
   }
   return workerInstance
 }
 
-function fixOcrMistakes(raw: string): string {
-  // Fix common OCR mistakes in card numbers
-  return raw
-    .replace(/\bO(?=\d)/g, '0')   // Leading O before digit → 0 (e.g. OP01 → but keep OP)
-    .replace(/(?<=[A-Z]{2,3}\d{1,2}[-.])\d*l\d*/g, m => m.replace(/l/g, '1'))  // l → 1 in number part
-    .replace(/\./g, '-')           // dot → dash (OCR often reads - as .)
-}
+export function extractCardNumber(text: string): string | null {
+  // Normalize common OCR mistakes before matching
+  const normalized = text
+    .toUpperCase()
+    .replace(/\./g, '-')   // dot → dash
+    .replace(/[Il]/g, '1') // I or l → 1 in numeric context
 
-export function extractCardNumber(text: string): ScanResult | null {
-  const fixed = fixOcrMistakes(text)
-  const match = fixed.match(CARD_NUMBER_REGEX)
+  const match = normalized.match(CARD_NUMBER_REGEX)
   if (!match) return null
-  const cardNumber = match[1]
+
+  return match[1]
     .toUpperCase()
     .replace('.', '-')
-    .replace(/O(?=\d)/g, '0')
-  return { cardNumber, confidence: 1 }
 }
 
-function cropBottomStrip(imageData: string): Promise<string> {
-  return new Promise(resolve => {
-    const img = new Image()
-    img.onload = () => {
-      const canvas = document.createElement('canvas')
-      const stripHeight = Math.floor(img.height * 0.25)
-      canvas.width = img.width
-      canvas.height = stripHeight
-      const ctx = canvas.getContext('2d')!
-      // Draw only the bottom 25% where the card number lives
-      ctx.drawImage(img, 0, img.height - stripHeight, img.width, stripHeight, 0, 0, img.width, stripHeight)
-      // Increase contrast
-      ctx.filter = 'contrast(1.5) brightness(1.1)'
-      resolve(canvas.toDataURL('image/jpeg', 0.95))
-    }
-    img.src = imageData
-  })
+// Crop + grayscale + threshold + upscale for best OCR results
+function preprocessRegion(
+  img: HTMLImageElement,
+  xRatio: number,
+  yRatio: number,
+  wRatio: number,
+  hRatio: number,
+  scale = 4
+): string {
+  const canvas = document.createElement('canvas')
+  const srcX = img.width * xRatio
+  const srcY = img.height * yRatio
+  const srcW = img.width * wRatio
+  const srcH = img.height * hRatio
+
+  canvas.width = srcW * scale
+  canvas.height = srcH * scale
+
+  const ctx = canvas.getContext('2d')!
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, canvas.width, canvas.height)
+
+  // Grayscale + binarize (threshold at 128)
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const d = imageData.data
+  for (let i = 0; i < d.length; i += 4) {
+    const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
+    const val = gray > 140 ? 255 : 0
+    d[i] = d[i + 1] = d[i + 2] = val
+  }
+  ctx.putImageData(imageData, 0, 0)
+
+  return canvas.toDataURL('image/png')
+}
+
+async function tryRecognize(worker: Awaited<ReturnType<typeof import('tesseract.js').createWorker>>, imageData: string): Promise<string | null> {
+  const { data } = await worker.recognize(imageData)
+  return extractCardNumber(data.text)
 }
 
 export async function recognizeCardNumber(imageData: string): Promise<ScanResult | null> {
   const worker = await getWorker()
 
-  // First try on the full image, then on the cropped bottom strip
-  for (const source of [imageData, await cropBottomStrip(imageData)]) {
-    const { data } = await worker.recognize(source)
-    const result = extractCardNumber(data.text)
-    if (result) {
-      return { cardNumber: result.cardNumber, confidence: data.confidence / 100 }
-    }
-  }
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = async () => {
+      // Strategy 1: bottom-left 40% wide, bottom 18% tall (where card number lives on OP cards)
+      const bottomLeft = preprocessRegion(img, 0, 0.82, 0.45, 0.18)
+      let cardNumber = await tryRecognize(worker, bottomLeft)
+      if (cardNumber) { resolve({ cardNumber, confidence: 0.9 }); return }
 
-  return null
+      // Strategy 2: full bottom 22%
+      const bottomStrip = preprocessRegion(img, 0, 0.78, 1, 0.22)
+      cardNumber = await tryRecognize(worker, bottomStrip)
+      if (cardNumber) { resolve({ cardNumber, confidence: 0.75 }); return }
+
+      // Strategy 3: full image with PSM 11 (sparse text, finds codes anywhere)
+      const fullWorker = await getWorker()
+      await fullWorker.setParameters({ tessedit_pageseg_mode: '11' as never })
+      const { data } = await fullWorker.recognize(imageData)
+      await fullWorker.setParameters({ tessedit_pageseg_mode: '7' as never })
+      cardNumber = extractCardNumber(data.text)
+      if (cardNumber) { resolve({ cardNumber, confidence: 0.5 }); return }
+
+      resolve(null)
+    }
+    img.src = imageData
+  })
 }
 
 export async function terminateWorker() {
