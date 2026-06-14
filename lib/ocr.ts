@@ -11,28 +11,24 @@ async function getWorker() {
     workerInstance = await createWorker('eng')
     await workerInstance.setParameters({
       tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-',
-      tessedit_pageseg_mode: '7' as never, // Single text line
+      tessedit_pageseg_mode: '7' as never,
     })
   }
   return workerInstance
 }
 
 export function extractCardNumber(text: string): string | null {
-  // Normalize common OCR mistakes before matching
   const normalized = text
     .toUpperCase()
-    .replace(/\./g, '-')   // dot → dash
-    .replace(/[Il]/g, '1') // I or l → 1 in numeric context
+    .replace(/\./g, '-')
+    .replace(/[Il]/g, '1')
 
   const match = normalized.match(CARD_NUMBER_REGEX)
   if (!match) return null
 
-  return match[1]
-    .toUpperCase()
-    .replace('.', '-')
+  return match[1].toUpperCase().replace('.', '-')
 }
 
-// Crop + grayscale + threshold + upscale for best OCR results
 function preprocessRegion(
   img: HTMLImageElement,
   xRatio: number,
@@ -55,7 +51,6 @@ function preprocessRegion(
   ctx.imageSmoothingQuality = 'high'
   ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, canvas.width, canvas.height)
 
-  // Grayscale + binarize (threshold at 128)
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
   const d = imageData.data
   for (let i = 0; i < d.length; i += 4) {
@@ -68,36 +63,51 @@ function preprocessRegion(
   return canvas.toDataURL('image/png')
 }
 
-async function tryRecognize(worker: Awaited<ReturnType<typeof import('tesseract.js').createWorker>>, imageData: string): Promise<string | null> {
+async function tryRecognize(
+  worker: Awaited<ReturnType<typeof import('tesseract.js').createWorker>>,
+  imageData: string
+): Promise<{ cardNumber: string | null; rawText: string }> {
   const { data } = await worker.recognize(imageData)
-  return extractCardNumber(data.text)
+  return { cardNumber: extractCardNumber(data.text), rawText: data.text }
 }
 
 export async function recognizeCardNumber(imageData: string): Promise<ScanResult | null> {
   const worker = await getWorker()
+  const allRawTexts: string[] = []
 
   return new Promise((resolve) => {
     const img = new Image()
     img.onload = async () => {
-      // Strategy 1: bottom-left 40% wide, bottom 18% tall (where card number lives on OP cards)
+      // Strategy 1: bottom-left 40%, bottom 18% (card number zone)
       const bottomLeft = preprocessRegion(img, 0, 0.82, 0.45, 0.18)
-      let cardNumber = await tryRecognize(worker, bottomLeft)
-      if (cardNumber) { resolve({ cardNumber, confidence: 0.9 }); return }
+      const r1 = await tryRecognize(worker, bottomLeft)
+      allRawTexts.push(`[BL] ${r1.rawText.trim()}`)
+      if (r1.cardNumber) {
+        resolve({ cardNumber: r1.cardNumber, confidence: 0.9, rawText: allRawTexts.join('\n') })
+        return
+      }
 
       // Strategy 2: full bottom 22%
       const bottomStrip = preprocessRegion(img, 0, 0.78, 1, 0.22)
-      cardNumber = await tryRecognize(worker, bottomStrip)
-      if (cardNumber) { resolve({ cardNumber, confidence: 0.75 }); return }
+      const r2 = await tryRecognize(worker, bottomStrip)
+      allRawTexts.push(`[BS] ${r2.rawText.trim()}`)
+      if (r2.cardNumber) {
+        resolve({ cardNumber: r2.cardNumber, confidence: 0.75, rawText: allRawTexts.join('\n') })
+        return
+      }
 
-      // Strategy 3: full image with PSM 11 (sparse text, finds codes anywhere)
-      const fullWorker = await getWorker()
-      await fullWorker.setParameters({ tessedit_pageseg_mode: '11' as never })
-      const { data } = await fullWorker.recognize(imageData)
-      await fullWorker.setParameters({ tessedit_pageseg_mode: '7' as never })
-      cardNumber = extractCardNumber(data.text)
-      if (cardNumber) { resolve({ cardNumber, confidence: 0.5 }); return }
+      // Strategy 3: full image, PSM 11
+      await worker.setParameters({ tessedit_pageseg_mode: '11' as never })
+      const r3 = await tryRecognize(worker, imageData)
+      await worker.setParameters({ tessedit_pageseg_mode: '7' as never })
+      allRawTexts.push(`[FULL] ${r3.rawText.trim()}`)
+      if (r3.cardNumber) {
+        resolve({ cardNumber: r3.cardNumber, confidence: 0.5, rawText: allRawTexts.join('\n') })
+        return
+      }
 
-      resolve(null)
+      // Nothing found — still return raw text for debug
+      resolve({ cardNumber: '', confidence: 0, rawText: allRawTexts.join('\n') })
     }
     img.src = imageData
   })

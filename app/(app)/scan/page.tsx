@@ -53,9 +53,14 @@ export default function ScanPage() {
           </div>
         )}
 
-        {error && !scanResult && (
-          <div className="absolute top-4 left-4 right-4 bg-red-500/90 text-white p-3 rounded-xl text-sm text-center">
-            {error}
+        {error && (
+          <div className="absolute top-4 left-4 right-4 bg-black/85 text-white p-3 rounded-xl text-xs space-y-1 max-h-48 overflow-y-auto">
+            <p className="text-red-400 font-semibold">{error}</p>
+            {scanResult?.rawText && (
+              <pre className="text-gray-300 whitespace-pre-wrap break-all font-mono leading-tight">
+                {scanResult.rawText}
+              </pre>
+            )}
           </div>
         )}
       </div>

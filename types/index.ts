@@ -45,4 +45,5 @@ export interface PriceData {
 export interface ScanResult {
   cardNumber: string
   confidence: number
+  rawText?: string
 }

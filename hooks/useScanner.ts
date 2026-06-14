@@ -40,9 +40,10 @@ export function useScanner() {
     setError(null)
     const { recognizeCardNumber } = await import('@/lib/ocr')
     const result = await recognizeCardNumber(imageData)
-    if (result) {
+    if (result && result.cardNumber) {
       setScanResult(result)
     } else {
+      setScanResult(result)  // keep rawText even when no card found
       setError('Numéro de carte non détecté')
     }
     setScanning(false)
