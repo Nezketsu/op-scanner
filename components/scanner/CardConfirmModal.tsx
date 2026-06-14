@@ -1,10 +1,9 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { getCardsByNumber } from '@/lib/tcgdex'
-import { fetchPrice } from '@/lib/pricing'
+import { getCardsByNumber } from '@/lib/optcgapi'
 import { useCollection } from '@/hooks/useCollection'
 import { VariantPicker } from './VariantPicker'
-import type { Card, PriceData } from '@/types'
+import type { Card } from '@/types'
 
 interface CardConfirmModalProps {
   cardNumber: string
@@ -14,7 +13,6 @@ interface CardConfirmModalProps {
 export function CardConfirmModal({ cardNumber, onClose }: CardConfirmModalProps) {
   const [cards, setCards] = useState<Card[]>([])
   const [selectedCard, setSelectedCard] = useState<Card | null>(null)
-  const [price, setPrice] = useState<PriceData | null>(null)
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)
   const { addCard } = useCollection()
@@ -26,21 +24,11 @@ export function CardConfirmModal({ cardNumber, onClose }: CardConfirmModalProps)
       setLoading(true)
       const results = await getCardsByNumber(setId, cardNum)
       setCards(results)
-      if (results.length === 1) {
-        setSelectedCard(results[0])
-        const p = await fetchPrice(results[0].id)
-        setPrice(p)
-      }
+      if (results.length === 1) setSelectedCard(results[0])
       setLoading(false)
     }
     load()
   }, [cardNumber])
-
-  const handleSelectCard = async (card: Card) => {
-    setSelectedCard(card)
-    const p = await fetchPrice(card.id)
-    setPrice(p)
-  }
 
   const handleAdd = async () => {
     if (!selectedCard) return
@@ -64,7 +52,7 @@ export function CardConfirmModal({ cardNumber, onClose }: CardConfirmModalProps)
       )}
 
       {!loading && cards.length > 1 && !selectedCard && (
-        <VariantPicker cards={cards} onSelect={handleSelectCard} />
+        <VariantPicker cards={cards} onSelect={setSelectedCard} />
       )}
 
       {selectedCard && (
@@ -85,12 +73,10 @@ export function CardConfirmModal({ cardNumber, onClose }: CardConfirmModalProps)
                   {selectedCard.rarity}
                 </span>
               )}
-              {price ? (
+              {selectedCard.market_price ? (
                 <div className="mt-2">
-                  <p className="text-2xl font-bold text-green-600">${price.price.toFixed(2)}</p>
-                  <p className="text-xs text-gray-400">
-                    via {price.source}{price.stale ? ' · prix périmé' : ''}
-                  </p>
+                  <p className="text-2xl font-bold text-green-600">${selectedCard.market_price.toFixed(2)}</p>
+                  <p className="text-xs text-gray-400">TCGPlayer market price</p>
                 </div>
               ) : (
                 <p className="text-sm text-gray-400 mt-2">Prix indisponible</p>

@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server'
 
-const CARD_NUMBER_REGEX = /\b([A-Z]{1,3}\d{1,2}-\d{3}[a-z]?)\b/i
+const CARD_NUMBER_REGEX = /\b([A-Z]{1,3}\d{1,2}-\d{3})(?!\d)/i
 
 function extractCardNumber(text: string): string | null {
   const normalized = text.toUpperCase().replace(/\./g, '-').replace(/[Il]/g, '1')
   const match = normalized.match(CARD_NUMBER_REGEX)
-  return match ? match[1].toUpperCase() : null
+  if (!match) return null
+  // Hard cut: take exactly PREFIX+SETNUM+"-"+first 3 digits
+  const parts = match[1].split('-')
+  return (parts[0] + '-' + parts[1].slice(0, 3)).toUpperCase()
 }
 
 export async function POST(request: Request) {

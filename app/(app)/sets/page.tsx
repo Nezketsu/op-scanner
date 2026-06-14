@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { getSets } from '@/lib/tcgdex'
+import { getSets } from '@/lib/optcgapi'
 import { useCollection } from '@/hooks/useCollection'
 import { SetList } from '@/components/sets/SetList'
 import type { Set } from '@/types'

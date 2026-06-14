@@ -50,9 +50,9 @@ export async function getCardsByNumber(setId: string, cardNumber: string): Promi
 }
 
 export async function getCardById(cardId: string): Promise<Card | null> {
-  const [setId] = cardId.split('-')
+  const [setId, localId] = cardId.split('-')
   try {
-    const res = await fetch(`${BASE_URL}/cards/${cardId}`)
+    const res = await fetch(`${BASE_URL}/sets/${setId}/${localId}`)
     if (!res.ok) return null
     const data: TCGDexCard = await res.json()
     return mapCard(setId)(data)

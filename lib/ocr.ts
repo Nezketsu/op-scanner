@@ -1,14 +1,24 @@
 import type { ScanResult } from '@/types'
 
-const CARD_NUMBER_REGEX = /\b([A-Z]{1,3}[\dO]{1,2}[-.][O\d]{3}[a-z]?)\b/i
+// (?!\d) instead of \b to stop exactly after 3 digits even if more digits follow
+const CARD_NUMBER_REGEX = /\b([A-Z]{1,3}[\dO]{1,2}[-.][\dO]{3})(?![a-zA-Z0-9])/i
+
+function normalizeCardNumber(raw: string): string {
+  // Guarantee exactly PREFIX+SETNUM+"-"+3DIGITS regardless of what regex captured
+  const m = raw.match(/^([A-Z]{1,3}\d{1,2}-)(\d{3,})/i)
+  if (m) return (m[1] + m[2].slice(0, 3)).toUpperCase()
+  return raw.toUpperCase()
+}
 
 export function extractCardNumber(text: string): string | null {
   const normalized = text
     .toUpperCase()
     .replace(/\./g, '-')
     .replace(/[Il]/g, '1')
+    .replace(/O(?=\d|-)/g, '0') // O → 0 when followed by digit or dash
   const match = normalized.match(CARD_NUMBER_REGEX)
-  return match ? match[1].toUpperCase().replace('.', '-') : null
+  if (!match) return null
+  return normalizeCardNumber(match[1].replace('.', '-'))
 }
 
 // Crop bottom 22% of image and upscale 3x for better recognition
