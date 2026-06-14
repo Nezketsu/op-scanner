@@ -1,19 +1,25 @@
 'use client'
-import { useState } from 'react'
+import { useEffect } from 'react'
 import { Viewfinder } from '@/components/scanner/Viewfinder'
 import { CardConfirmModal } from '@/components/scanner/CardConfirmModal'
 import { useScanner } from '@/hooks/useScanner'
 
 export default function ScanPage() {
-  const { processImage, scanResult, scanning, error, reset } = useScanner()
+  const { videoRef, startCamera, stopCamera, captureFrame, processImage, scanResult, scanning, error, reset } = useScanner()
 
-  const handleCapture = async (imageData: string) => {
-    await processImage(imageData)
+  useEffect(() => {
+    startCamera()
+    return () => stopCamera()
+  }, [startCamera, stopCamera])
+
+  const handleCapture = async () => {
+    const frame = captureFrame()
+    if (frame) await processImage(frame)
   }
 
   return (
     <div className="fixed inset-0">
-      <Viewfinder onCapture={handleCapture} />
+      <Viewfinder videoRef={videoRef} onCapture={handleCapture} />
 
       {scanResult && (
         <div className="absolute top-4 left-0 right-0 flex justify-center">
