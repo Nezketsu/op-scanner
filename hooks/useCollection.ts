@@ -3,10 +3,11 @@ import { useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { CollectionEntry, Card } from '@/types'
 
+const supabase = createClient()
+
 export function useCollection() {
   const [entries, setEntries] = useState<CollectionEntry[]>([])
   const [loading, setLoading] = useState(false)
-  const supabase = createClient()
 
   const loadCollection = useCallback(async () => {
     setLoading(true)
@@ -29,7 +30,7 @@ export function useCollection() {
     }
 
     // Crée ou met à jour la carte en DB avec tous ses détails
-    const { error: cardError } = await supabase
+    const { data: cardData, error: cardError } = await supabase
       .from('cards')
       .upsert(
         {
@@ -46,10 +47,18 @@ export function useCollection() {
         },
         { onConflict: 'id', ignoreDuplicates: false }
       )
+      .select('id')
+
+    console.log('[DEBUG] cards upsert → card.id:', card.id, '| data:', cardData, '| error:', cardError)
 
     if (cardError) {
       console.error('Erreur insertion carte:', cardError)
       return { error: new Error('Impossible de créer la carte') }
+    }
+
+    if (!cardData || cardData.length === 0) {
+      console.error('[DEBUG] Carte non insérée en base (RLS ou FK silencieux)')
+      return { error: new Error('Carte non insérée en base') }
     }
 
     // Ajoute à la collection
