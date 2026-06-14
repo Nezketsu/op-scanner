@@ -6,7 +6,7 @@ vi.mock('@supabase/ssr', () => ({
 }))
 
 vi.mock('next/headers', () => ({
-  cookies: vi.fn(() => ({
+  cookies: vi.fn(async () => ({
     getAll: vi.fn(() => []),
     set: vi.fn(),
   })),
@@ -23,7 +23,7 @@ describe('supabase/client', () => {
 describe('supabase/server', () => {
   it('creates a server client with auth', async () => {
     const { createClient } = await import('@/lib/supabase/server')
-    const client = createClient()
+    const client = await createClient()
     expect(client).toHaveProperty('auth')
   })
 })
