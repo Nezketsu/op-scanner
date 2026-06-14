@@ -35,7 +35,7 @@ export function CardConfirmModal({ cardNumber, onClose }: CardConfirmModalProps)
     if (!selectedCard) return
     setAdding(true)
     setError(null)
-    const result = await addCard(selectedCard.id, null)
+    const result = await addCard(selectedCard, null)
     setAdding(false)
     if (result?.error) {
       const errorMsg = result.error instanceof Error ? result.error.message : 'Erreur inconnue'

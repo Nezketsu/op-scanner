@@ -1,7 +1,7 @@
 'use client'
 import { useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { CollectionEntry } from '@/types'
+import type { CollectionEntry, Card } from '@/types'
 
 export function useCollection() {
   const [entries, setEntries] = useState<CollectionEntry[]>([])
@@ -22,16 +22,41 @@ export function useCollection() {
     setLoading(false)
   }, [])
 
-  const addCard = useCallback(async (cardId: string, variantId: string | null) => {
+  const addCard = useCallback(async (card: Card, variantId: string | null) => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return { error: new Error('Utilisateur non connecté') }
     }
 
+    // Crée ou met à jour la carte en DB avec tous ses détails
+    const { error: cardError } = await supabase
+      .from('cards')
+      .upsert(
+        {
+          id: card.id,
+          set_id: card.set_id,
+          card_number: card.card_number,
+          name: card.name || 'Sans nom',
+          image_url: card.image_url,
+          rarity: card.rarity,
+          variants: card.variants,
+          market_price: card.market_price,
+          price_source: card.price_source,
+          price_updated_at: card.price_updated_at,
+        },
+        { onConflict: 'id', ignoreDuplicates: false }
+      )
+
+    if (cardError) {
+      console.error('Erreur insertion carte:', cardError)
+      return { error: new Error('Impossible de créer la carte') }
+    }
+
+    // Ajoute à la collection
     const { error } = await supabase
       .from('collection')
       .upsert(
-        { user_id: user.id, card_id: cardId, variant_id: variantId, quantity: 1 },
+        { user_id: user.id, card_id: card.id, variant_id: variantId, quantity: 1 },
         { onConflict: 'user_id,card_id,variant_id', ignoreDuplicates: false }
       )
 

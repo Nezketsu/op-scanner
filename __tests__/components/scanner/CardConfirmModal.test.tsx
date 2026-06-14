@@ -7,7 +7,7 @@ const { mockGetCardsByNumber, mockFetchPrice, mockAddCard } = vi.hoisted(() => (
   mockAddCard: vi.fn(),
 }))
 
-vi.mock('@/lib/tcgdex', () => ({ getCardsByNumber: mockGetCardsByNumber }))
+vi.mock('@/lib/optcgapi', () => ({ getCardsByNumber: mockGetCardsByNumber }))
 vi.mock('@/lib/pricing', () => ({ fetchPrice: mockFetchPrice }))
 vi.mock('@/hooks/useCollection', () => ({
   useCollection: () => ({ addCard: mockAddCard, entries: [], loading: false, loadCollection: vi.fn(), updateQuantity: vi.fn(), removeCard: vi.fn() }),
@@ -19,7 +19,7 @@ import type { Card } from '@/types'
 const mockCard: Card = {
   id: 'OP01-001', set_id: 'OP01', card_number: 1,
   name: 'Monkey D. Luffy', image_url: null, rarity: 'L',
-  variants: null, market_price: null, price_source: null, price_updated_at: null,
+  variants: null, market_price: 12.50, price_source: 'tcgapi', price_updated_at: new Date().toISOString(),
 }
 
 describe('CardConfirmModal', () => {
@@ -56,7 +56,7 @@ describe('CardConfirmModal', () => {
   it('calls addCard and onClose on confirm', async () => {
     mockGetCardsByNumber.mockResolvedValue([mockCard])
     mockFetchPrice.mockResolvedValue(null)
-    mockAddCard.mockResolvedValue(undefined)
+    mockAddCard.mockResolvedValue({ error: null })
     const onClose = vi.fn()
 
     render(<CardConfirmModal cardNumber="OP01-001" onClose={onClose} />)
@@ -65,7 +65,7 @@ describe('CardConfirmModal', () => {
     fireEvent.click(screen.getByText('Ajouter à ma collection'))
 
     await waitFor(() => {
-      expect(mockAddCard).toHaveBeenCalledWith('OP01-001', null)
+      expect(mockAddCard).toHaveBeenCalledWith(mockCard, null)
       expect(onClose).toHaveBeenCalled()
     })
   })

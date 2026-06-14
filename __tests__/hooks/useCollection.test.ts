@@ -55,8 +55,21 @@ describe('useCollection', () => {
     const { useCollection } = await import('@/hooks/useCollection')
     const { result } = renderHook(() => useCollection())
 
+    const mockCard = {
+      id: 'OP01-001',
+      set_id: 'OP01',
+      card_number: 1,
+      name: 'Test Card',
+      image_url: null,
+      rarity: null,
+      variants: null,
+      market_price: null,
+      price_source: null,
+      price_updated_at: null,
+    }
+
     await act(async () => {
-      await result.current.addCard('OP01-001', null)
+      await result.current.addCard(mockCard, null)
     })
 
     expect(mockUpsert).toHaveBeenCalledWith(
