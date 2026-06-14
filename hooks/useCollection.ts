@@ -24,16 +24,23 @@ export function useCollection() {
 
   const addCard = useCallback(async (cardId: string, variantId: string | null) => {
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    if (!user) {
+      return { error: new Error('Utilisateur non connecté') }
+    }
 
-    await supabase
+    const { error } = await supabase
       .from('collection')
       .upsert(
         { user_id: user.id, card_id: cardId, variant_id: variantId, quantity: 1 },
         { onConflict: 'user_id,card_id,variant_id', ignoreDuplicates: false }
       )
 
+    if (error) {
+      return { error }
+    }
+
     await loadCollection()
+    return { error: null }
   }, [loadCollection])
 
   const removeCard = useCallback(async (entryId: string) => {

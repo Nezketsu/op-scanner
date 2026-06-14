@@ -15,6 +15,7 @@ export function CardConfirmModal({ cardNumber, onClose }: CardConfirmModalProps)
   const [selectedCard, setSelectedCard] = useState<Card | null>(null)
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const { addCard } = useCollection()
 
   const [setId, cardNum] = cardNumber.split('-')
@@ -33,8 +34,13 @@ export function CardConfirmModal({ cardNumber, onClose }: CardConfirmModalProps)
   const handleAdd = async () => {
     if (!selectedCard) return
     setAdding(true)
-    await addCard(selectedCard.id, null)
+    setError(null)
+    const result = await addCard(selectedCard.id, null)
     setAdding(false)
+    if (result?.error) {
+      setError("Impossible d'ajouter cette carte à la collection")
+      return
+    }
     onClose()
   }
 
@@ -43,6 +49,8 @@ export function CardConfirmModal({ cardNumber, onClose }: CardConfirmModalProps)
       <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4" />
 
       {loading && <p className="text-center text-gray-500">Chargement...</p>}
+
+      {error && <p className="mb-3 text-sm text-red-600 text-center">{error}</p>}
 
       {!loading && cards.length === 0 && (
         <div className="text-center">
