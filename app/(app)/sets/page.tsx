@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { getSets } from '@/lib/optcgapi'
+import { getSets, getSetCardCount } from '@/lib/optcgapi'
 import { useCollection } from '@/hooks/useCollection'
 import { SetList } from '@/components/sets/SetList'
 import type { Set } from '@/types'
@@ -8,15 +8,24 @@ import type { Set } from '@/types'
 export default function SetsPage() {
   const [sets, setSets] = useState<Set[]>([])
   const [loading, setLoading] = useState(true)
+  const [setTotals, setSetTotals] = useState<Record<string, number>>({})
   const { entries, loadCollection } = useCollection()
 
   useEffect(() => {
     async function load() {
       const [fetchedSets] = await Promise.all([getSets(), loadCollection()])
-      setSets(fetchedSets.sort((a, b) =>
+      const sorted = fetchedSets.sort((a, b) =>
         (b.release_date ?? '').localeCompare(a.release_date ?? '')
-      ))
+      )
+      setSets(sorted)
       setLoading(false)
+
+      // Charge les totaux en parallèle en arrière-plan
+      sorted.forEach(set => {
+        getSetCardCount(set.id).then(count => {
+          setSetTotals(prev => ({ ...prev, [set.id]: count }))
+        })
+      })
     }
     load()
   }, [])
@@ -27,16 +36,33 @@ export default function SetsPage() {
     return acc
   }, {})
 
+  const enrichedSets = sets.map(s => ({
+    ...s,
+    total_cards: setTotals[s.id] ?? s.total_cards,
+  }))
+
   return (
-    <div>
-      <div className="px-4 py-4 border-b border-gray-100">
-        <h1 className="text-xl font-bold">Extensions</h1>
-        <p className="text-sm text-gray-500">{sets.length} sets disponibles</p>
+    <div className="min-h-screen bg-slate-50">
+      <div className="px-4 pt-4 pb-3 bg-white border-b border-slate-100">
+        <h1 className="text-lg font-bold text-slate-900">Extensions</h1>
+        <p className="text-sm text-slate-400">{sets.length} sets disponibles</p>
       </div>
       {loading ? (
-        <div className="flex items-center justify-center h-64 text-gray-500">Chargement...</div>
+        <div className="flex flex-col divide-y divide-slate-100">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3 px-4 py-3.5 bg-white animate-pulse">
+              <div className="w-11 h-11 bg-slate-200 rounded-lg shrink-0" />
+              <div className="flex-1">
+                <div className="h-4 bg-slate-200 rounded w-1/2 mb-2" />
+                <div className="h-3 bg-slate-200 rounded w-1/3" />
+              </div>
+            </div>
+          ))}
+        </div>
       ) : (
-        <SetList sets={sets} collectionCounts={collectionCounts} />
+        <div className="pb-24">
+          <SetList sets={enrichedSets} collectionCounts={collectionCounts} />
+        </div>
       )}
     </div>
   )

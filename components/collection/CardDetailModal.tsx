@@ -1,3 +1,5 @@
+'use client'
+import { useRef, useState } from 'react'
 import type { CollectionEntry } from '@/types'
 
 const RARITY_COLORS: Record<string, string> = {
@@ -19,10 +21,35 @@ interface CardDetailModalProps {
 export function CardDetailModal({ entry, onClose, onUpdateQuantity, onRemove }: CardDetailModalProps) {
   const { card } = entry
   const rarityClass = card?.rarity ? (RARITY_COLORS[card.rarity] ?? 'bg-slate-100 text-slate-500') : ''
+  const startY = useRef(0)
+  const [dragY, setDragY] = useState(0)
+  const dragging = useRef(false)
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    startY.current = e.touches[0].clientY
+    dragging.current = true
+  }
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (!dragging.current) return
+    const delta = Math.max(0, e.touches[0].clientY - startY.current)
+    setDragY(delta)
+  }
+  const onTouchEnd = () => {
+    dragging.current = false
+    if (dragY > 100) onClose()
+    else setDragY(0)
+  }
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-end z-50" onClick={onClose}>
-      <div className="w-full bg-white rounded-t-2xl p-5 pb-8" onClick={e => e.stopPropagation()}>
+      <div
+        className="w-full bg-white rounded-t-2xl p-5 pb-8"
+        style={{ transform: `translateY(${dragY}px)`, transition: dragY === 0 ? 'transform 0.25s ease' : 'none' }}
+        onClick={e => e.stopPropagation()}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
         <div className="w-9 h-1 bg-slate-200 rounded-full mx-auto mb-5" />
 
         <div className="flex gap-4 mb-5">

@@ -106,23 +106,32 @@ export async function getSets(): Promise<Set[]> {
   }
 }
 
+const setCardsCache = new Map<string, Card[]>()
+
 export async function getCardsBySet(setId: string): Promise<Card[]> {
+  if (setCardsCache.has(setId)) return setCardsCache.get(setId)!
   const apiId = toApiSetId(setId)
   try {
     const res = await fetch(`${BASE_URL}/sets/filtered/?set_id=${apiId}`)
     if (!res.ok) return []
     const data: OptcgCard[] = await res.json()
-    // Group by card_set_id to merge normal + parallel
     const grouped = new Map<string, OptcgCard[]>()
     for (const card of data) {
       const key = card.card_set_id
       if (!grouped.has(key)) grouped.set(key, [])
       grouped.get(key)!.push(card)
     }
-    return Array.from(grouped.values()).map(groupIntoCard)
+    const cards = Array.from(grouped.values()).map(groupIntoCard)
+    setCardsCache.set(setId, cards)
+    return cards
   } catch {
     return []
   }
+}
+
+export async function getSetCardCount(setId: string): Promise<number> {
+  const cards = await getCardsBySet(setId)
+  return cards.length
 }
 
 export async function fetchPriceFromApi(cardId: string): Promise<PriceData | null> {

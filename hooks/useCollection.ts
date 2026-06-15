@@ -97,7 +97,7 @@ export function useCollection() {
       await removeCard(entryId)
       return
     }
-    await supabase.from('collection').upsert({ id: entryId, quantity })
+    await supabase.from('collection').update({ quantity }).eq('id', entryId)
     setEntries(prev => prev.map(e => e.id === entryId ? { ...e, quantity } : e))
   }, [removeCard])
 

@@ -89,14 +89,17 @@ export default function SetDetailPage() {
         </div>
       )}
 
-      {selectedEntry && (
-        <CardDetailModal
-          entry={selectedEntry}
-          onClose={() => setSelectedEntry(null)}
-          onUpdateQuantity={updateQuantity}
-          onRemove={removeCard}
-        />
-      )}
+      {selectedEntry && (() => {
+        const liveEntry = entries.find(e => e.id === selectedEntry.id) ?? selectedEntry
+        return (
+          <CardDetailModal
+            entry={liveEntry}
+            onClose={() => setSelectedEntry(null)}
+            onUpdateQuantity={updateQuantity}
+            onRemove={removeCard}
+          />
+        )
+      })()}
     </div>
   )
 }
