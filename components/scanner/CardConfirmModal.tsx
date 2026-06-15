@@ -10,6 +10,15 @@ interface CardConfirmModalProps {
   onClose: () => void
 }
 
+const RARITY_COLORS: Record<string, string> = {
+  'Leader': 'bg-amber-100 text-amber-700',
+  'Super Rare': 'bg-purple-100 text-purple-700',
+  'Secret Rare': 'bg-red-100 text-red-600',
+  'Rare': 'bg-blue-100 text-blue-700',
+  'Uncommon': 'bg-slate-100 text-slate-600',
+  'Common': 'bg-slate-100 text-slate-500',
+}
+
 export function CardConfirmModal({ cardNumber, onClose }: CardConfirmModalProps) {
   const [cards, setCards] = useState<Card[]>([])
   const [selectedCard, setSelectedCard] = useState<Card | null>(null)
@@ -38,26 +47,43 @@ export function CardConfirmModal({ cardNumber, onClose }: CardConfirmModalProps)
     const result = await addCard(selectedCard, null)
     setAdding(false)
     if (result?.error) {
-      const errorMsg = result.error instanceof Error ? result.error.message : 'Erreur inconnue'
-      setError(`Erreur: ${errorMsg}`)
-      console.error('Ajout échoué:', result.error)
+      setError("Impossible d'ajouter la carte. Réessaie.")
       return
     }
     onClose()
   }
 
+  const rarityClass = selectedCard?.rarity
+    ? (RARITY_COLORS[selectedCard.rarity] ?? 'bg-slate-100 text-slate-500')
+    : ''
+
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl p-5 pb-24 max-h-[85vh] overflow-y-auto shadow-2xl z-[60]">
-      <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4" />
+    <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl p-5 pb-24 max-h-[85vh] overflow-y-auto shadow-2xl z-60">
+      <div className="w-9 h-1 bg-slate-200 rounded-full mx-auto mb-5" />
 
-      {loading && <p className="text-center text-gray-500">Chargement...</p>}
+      {loading && (
+        <div className="flex flex-col gap-3 animate-pulse">
+          <div className="flex gap-4">
+            <div className="w-28 h-40 bg-slate-200 rounded-xl" />
+            <div className="flex-1 flex flex-col gap-2 pt-1">
+              <div className="h-5 bg-slate-200 rounded w-3/4" />
+              <div className="h-4 bg-slate-200 rounded w-1/2" />
+              <div className="h-6 bg-slate-200 rounded w-1/3 mt-4" />
+            </div>
+          </div>
+        </div>
+      )}
 
-      {error && <p className="mb-3 text-sm text-red-600 text-center">{error}</p>}
+      {error && (
+        <p className="mb-4 text-sm text-red-500 text-center font-medium">{error}</p>
+      )}
 
       {!loading && cards.length === 0 && (
-        <div className="text-center">
-          <p className="text-gray-600 mb-2">Carte introuvable pour {cardNumber}</p>
-          <button onClick={onClose} className="text-sm text-blue-600 underline">Fermer</button>
+        <div className="text-center py-4">
+          <p className="text-slate-600 mb-3 font-medium">Carte introuvable pour {cardNumber}</p>
+          <button onClick={onClose} className="text-sm text-indigo-500 font-semibold">
+            Fermer
+          </button>
         </div>
       )}
 
@@ -66,44 +92,59 @@ export function CardConfirmModal({ cardNumber, onClose }: CardConfirmModalProps)
       )}
 
       {selectedCard && (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-5">
           <div className="flex gap-4">
             {selectedCard.image_url ? (
-              <img src={selectedCard.image_url} alt={selectedCard.name} className="w-28 rounded-xl shadow" />
+              <img
+                src={selectedCard.image_url}
+                alt={selectedCard.name}
+                className="w-28 rounded-xl shadow-md"
+              />
             ) : (
-              <div className="w-28 h-40 bg-gray-100 rounded-xl flex items-center justify-center text-gray-400 text-xs text-center p-2">
+              <div className="w-28 h-40 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 text-xs text-center p-2">
                 Pas d'image
               </div>
             )}
-            <div className="flex flex-col gap-1 flex-1">
-              <h2 className="font-bold text-lg leading-tight">{selectedCard.name}</h2>
-              <p className="text-sm text-gray-500">{selectedCard.set_id} — {cardNumber}</p>
+            <div className="flex flex-col gap-1.5 flex-1">
+              <h2 className="font-bold text-lg text-slate-900 leading-tight">
+                {selectedCard.name}
+              </h2>
+              <p className="text-sm text-slate-400">
+                {selectedCard.set_id} · {cardNumber}
+              </p>
               {selectedCard.rarity && (
-                <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full w-fit">
+                <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full w-fit ${rarityClass}`}>
                   {selectedCard.rarity}
                 </span>
               )}
-              {selectedCard.market_price ? (
-                <div className="mt-2">
-                  <p className="text-2xl font-bold text-green-600">${selectedCard.market_price.toFixed(2)}</p>
-                  <p className="text-xs text-gray-400">TCGPlayer market price</p>
-                </div>
-              ) : (
-                <p className="text-sm text-gray-400 mt-2">Prix indisponible</p>
-              )}
+              <div className="mt-2">
+                {selectedCard.market_price ? (
+                  <>
+                    <p className="text-2xl font-bold text-green-500">
+                      ${selectedCard.market_price.toFixed(2)}
+                    </p>
+                    <p className="text-xs text-slate-400">TCGPlayer market price</p>
+                  </>
+                ) : (
+                  <p className="text-sm text-slate-400">Prix indisponible</p>
+                )}
+              </div>
             </div>
           </div>
 
           <div className="flex gap-3">
-            <button onClick={onClose} className="flex-1 py-3 border border-gray-300 rounded-xl text-gray-700 font-medium">
+            <button
+              onClick={onClose}
+              className="flex-1 py-3 border border-slate-200 rounded-xl text-slate-600 font-semibold text-sm"
+            >
               Annuler
             </button>
             <button
               onClick={handleAdd}
               disabled={adding}
-              className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-medium disabled:opacity-50"
+              className="flex-1 py-3 bg-indigo-500 text-white rounded-xl font-semibold text-sm disabled:opacity-50"
             >
-              {adding ? 'Ajout...' : 'Ajouter à ma collection'}
+              {adding ? 'Ajout...' : 'Ajouter'}
             </button>
           </div>
         </div>

@@ -38,6 +38,22 @@ function mapCard(setId: string) {
   })
 }
 
+const setCardsCache = new Map<string, Card[]>()
+
+export async function getCardsBySet(setId: string): Promise<Card[]> {
+  if (setCardsCache.has(setId)) return setCardsCache.get(setId)!
+  try {
+    const res = await fetch(`${BASE_URL}/sets/${setId}`)
+    if (!res.ok) return []
+    const data: { cards: TCGDexCard[] } = await res.json()
+    const cards = (data.cards ?? []).map(mapCard(setId))
+    setCardsCache.set(setId, cards)
+    return cards
+  } catch {
+    return []
+  }
+}
+
 export async function getCardsByNumber(setId: string, cardNumber: string): Promise<Card[]> {
   try {
     const res = await fetch(`${BASE_URL}/sets/${setId}/cards?localId=${cardNumber}`)

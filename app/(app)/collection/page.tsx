@@ -1,65 +1,167 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
+import { Search, SlidersHorizontal } from 'lucide-react'
 import { useCollection } from '@/hooks/useCollection'
+import { getCardsBySet } from '@/lib/tcgdex'
 import { SetSection } from '@/components/collection/SetSection'
 import { CardDetailModal } from '@/components/collection/CardDetailModal'
-import type { CollectionEntry } from '@/types'
+import { filterEntries, sortEntries, getRarities } from '@/lib/collection-filters'
+import type { CollectionEntry, Card } from '@/types'
+import type { SortKey } from '@/lib/collection-filters'
+
+const SORT_LABELS: Record<SortKey, string> = {
+  number: 'Numéro',
+  name: 'Nom',
+  rarity: 'Rareté',
+  value: 'Valeur',
+}
 
 export default function CollectionPage() {
   const { entries, loading, loadCollection, updateQuantity, removeCard } = useCollection()
   const [selectedEntry, setSelectedEntry] = useState<CollectionEntry | null>(null)
   const [search, setSearch] = useState('')
+  const [rarityFilter, setRarityFilter] = useState<string | null>(null)
+  const [sort, setSort] = useState<SortKey>('number')
+  const [allCardsBySet, setAllCardsBySet] = useState<Record<string, Card[]>>({})
 
   useEffect(() => { loadCollection() }, [loadCollection])
 
-  const filtered = search
-    ? entries.filter(e =>
-        e.card?.name.toLowerCase().includes(search.toLowerCase()) ||
-        e.card_id.toLowerCase().includes(search.toLowerCase())
-      )
-    : entries
+  const bySet = useMemo(() => {
+    return entries.reduce<Record<string, CollectionEntry[]>>((acc, entry) => {
+      const setId = entry.card?.set_id ?? entry.card_id.split('-')[0]
+      if (!acc[setId]) acc[setId] = []
+      acc[setId].push(entry)
+      return acc
+    }, {})
+  }, [entries])
 
-  const bySet = filtered.reduce<Record<string, CollectionEntry[]>>((acc, entry) => {
-    const setId = entry.card?.set_id ?? entry.card_id.split('-')[0]
-    if (!acc[setId]) acc[setId] = []
-    acc[setId].push(entry)
-    return acc
-  }, {})
+  useEffect(() => {
+    const setIds = Object.keys(bySet)
+    const missing = setIds.filter(id => !allCardsBySet[id])
+    if (!missing.length) return
+    Promise.all(missing.map(id => getCardsBySet(id).then(cards => ({ id, cards })))).then(results => {
+      setAllCardsBySet(prev => {
+        const next = { ...prev }
+        for (const { id, cards } of results) next[id] = cards
+        return next
+      })
+    })
+  }, [bySet])
 
-  if (loading) {
-    return <div className="flex items-center justify-center h-64 text-gray-500">Chargement...</div>
-  }
+  const rarities = useMemo(() => getRarities(entries), [entries])
+
+  const filteredBySet = useMemo(() => {
+    const result: Record<string, CollectionEntry[]> = {}
+    for (const [setId, setEntries] of Object.entries(bySet)) {
+      let items = filterEntries(setEntries, rarityFilter)
+      if (search) {
+        items = items.filter(e =>
+          e.card?.name.toLowerCase().includes(search.toLowerCase()) ||
+          e.card_id.toLowerCase().includes(search.toLowerCase())
+        )
+      }
+      items = sortEntries(items, sort)
+      if (items.length) result[setId] = items
+    }
+    return result
+  }, [bySet, rarityFilter, search, sort])
 
   return (
-    <div>
-      <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 z-10">
-        <h1 className="text-xl font-bold mb-2">Ma collection</h1>
-        <input
-          type="search"
-          placeholder="Rechercher une carte..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+    <div className="min-h-screen bg-slate-50">
+      <div className="sticky top-0 bg-white border-b border-slate-100 z-10">
+        <div className="px-4 pt-4 pb-3">
+          <h1 className="text-lg font-bold text-slate-900 mb-3">Ma collection</h1>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" strokeWidth={2} />
+              <input
+                type="search"
+                placeholder="Rechercher..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
+              />
+            </div>
+            <div className="relative">
+              <SlidersHorizontal size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" strokeWidth={2} />
+              <select
+                value={sort}
+                onChange={e => setSort(e.target.value as SortKey)}
+                className="pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
+              >
+                {(Object.keys(SORT_LABELS) as SortKey[]).map(k => (
+                  <option key={k} value={k}>{SORT_LABELS[k]}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {rarities.length > 0 && (
+            <div className="flex gap-2 mt-3 overflow-x-auto pb-1 scrollbar-none">
+              <button
+                onClick={() => setRarityFilter(null)}
+                className={`shrink-0 px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                  rarityFilter === null
+                    ? 'bg-indigo-500 text-white border-indigo-500'
+                    : 'bg-white text-slate-500 border-slate-200'
+                }`}
+              >
+                Tout
+              </button>
+              {rarities.map(r => (
+                <button
+                  key={r}
+                  onClick={() => setRarityFilter(f => f === r ? null : r)}
+                  className={`shrink-0 px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                    rarityFilter === r
+                      ? 'bg-indigo-500 text-white border-indigo-500'
+                      : 'bg-white text-slate-500 border-slate-200'
+                  }`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
-      {Object.entries(bySet).length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-          <p className="text-4xl mb-3">📭</p>
-          <p>Ta collection est vide</p>
-          <p className="text-sm mt-1">Scanne ta première carte !</p>
+      {loading ? (
+        <div className="px-4 pt-4 flex flex-col gap-4">
+          {[1, 2].map(i => (
+            <div key={i} className="animate-pulse">
+              <div className="h-14 bg-white rounded-t-xl border border-slate-100" />
+              <div className="grid grid-cols-4 gap-1.5 p-4 bg-white border border-t-0 border-slate-100 rounded-b-xl">
+                {Array.from({ length: 8 }).map((_, j) => (
+                  <div key={j} className="aspect-2/3 bg-slate-200 rounded-lg" />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : Object.keys(filteredBySet).length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-64 text-slate-400">
+          <p className="text-3xl mb-3">📭</p>
+          <p className="font-medium text-slate-500">
+            {entries.length === 0 ? 'Ta collection est vide' : 'Aucun résultat'}
+          </p>
+          <p className="text-sm mt-1">
+            {entries.length === 0 ? 'Scanne ta première carte !' : 'Essaie un autre filtre'}
+          </p>
         </div>
       ) : (
-        Object.entries(bySet).map(([setId, setEntries]) => (
-          <SetSection
-            key={setId}
-            setId={setId}
-            setName={setEntries[0]?.card?.set_id ?? setId}
-            totalCards={null}
-            entries={setEntries}
-            onCardTap={setSelectedEntry}
-          />
-        ))
+        <div className="pb-24">
+          {Object.entries(filteredBySet).map(([setId, setEntries]) => (
+            <SetSection
+              key={setId}
+              setId={setId}
+              setName={setEntries[0]?.card?.set_id ?? setId}
+              allCards={allCardsBySet[setId] ?? []}
+              entries={setEntries}
+              onCardTap={setSelectedEntry}
+            />
+          ))}
+        </div>
       )}
 
       {selectedEntry && (

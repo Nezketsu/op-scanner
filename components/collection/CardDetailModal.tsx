@@ -1,5 +1,14 @@
 import type { CollectionEntry } from '@/types'
 
+const RARITY_COLORS: Record<string, string> = {
+  'Leader': 'bg-amber-100 text-amber-700',
+  'Super Rare': 'bg-purple-100 text-purple-700',
+  'Secret Rare': 'bg-red-100 text-red-600',
+  'Rare': 'bg-blue-100 text-blue-700',
+  'Uncommon': 'bg-slate-100 text-slate-600',
+  'Common': 'bg-slate-100 text-slate-500',
+}
+
 interface CardDetailModalProps {
   entry: CollectionEntry
   onClose: () => void
@@ -9,51 +18,58 @@ interface CardDetailModalProps {
 
 export function CardDetailModal({ entry, onClose, onUpdateQuantity, onRemove }: CardDetailModalProps) {
   const { card } = entry
+  const rarityClass = card?.rarity ? (RARITY_COLORS[card.rarity] ?? 'bg-slate-100 text-slate-500') : ''
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-end z-50" onClick={onClose}>
-      <div className="w-full bg-white rounded-t-2xl p-5" onClick={e => e.stopPropagation()}>
-        <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4" />
+      <div className="w-full bg-white rounded-t-2xl p-5 pb-8" onClick={e => e.stopPropagation()}>
+        <div className="w-9 h-1 bg-slate-200 rounded-full mx-auto mb-5" />
 
         <div className="flex gap-4 mb-5">
           {card?.image_url ? (
-            <img src={card.image_url} alt={card.name} className="w-24 rounded-xl shadow" />
+            <img src={card.image_url} alt={card.name} className="w-28 rounded-xl shadow-md shrink-0" />
           ) : (
-            <div className="w-24 h-32 bg-gray-100 rounded-xl" />
+            <div className="w-28 h-40 bg-slate-100 rounded-xl shrink-0" />
           )}
-          <div className="flex-1">
-            <h2 className="font-bold text-lg">{card?.name ?? entry.card_id}</h2>
-            <p className="text-sm text-gray-500">{entry.card_id}</p>
+          <div className="flex-1 flex flex-col gap-1.5">
+            <h2 className="font-bold text-lg text-slate-900 leading-tight">{card?.name ?? entry.card_id}</h2>
+            <p className="text-sm text-slate-400">{entry.card_id}</p>
             {card?.rarity && (
-              <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full">{card.rarity}</span>
+              <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full w-fit ${rarityClass}`}>
+                {card.rarity}
+              </span>
             )}
-            {card?.market_price && (
-              <p className="text-xl font-bold text-green-600 mt-2">
-                ${card.market_price.toFixed(2)}
-                {card.price_source && <span className="text-xs text-gray-400 font-normal ml-1">({card.price_source})</span>}
-              </p>
+            {card?.market_price ? (
+              <div className="mt-2">
+                <p className="text-2xl font-bold text-green-500">${card.market_price.toFixed(2)}</p>
+                <p className="text-xs text-slate-400">
+                  {card.price_source ? `via ${card.price_source}` : 'prix estimé'}
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400 mt-2">Prix indisponible</p>
             )}
           </div>
         </div>
 
-        <div className="flex items-center justify-between bg-gray-50 rounded-xl p-4 mb-4">
-          <span className="text-sm font-medium text-gray-700">Quantité</span>
-          <div className="flex items-center gap-4">
+        <div className="flex items-center justify-between bg-slate-50 rounded-xl p-4 mb-4">
+          <span className="text-sm font-semibold text-slate-700">Quantité</span>
+          <div className="flex items-center gap-5">
             <button
               onClick={() => onUpdateQuantity(entry.id, entry.quantity - 1)}
-              className="w-9 h-9 rounded-full border border-gray-300 flex items-center justify-center text-xl font-bold"
-            >-</button>
-            <span className="text-xl font-bold w-6 text-center">{entry.quantity}</span>
+              className="w-9 h-9 rounded-full border border-slate-200 flex items-center justify-center text-xl font-bold text-slate-600 active:bg-slate-100"
+            >−</button>
+            <span className="text-xl font-bold w-6 text-center text-slate-900">{entry.quantity}</span>
             <button
               onClick={() => onUpdateQuantity(entry.id, entry.quantity + 1)}
-              className="w-9 h-9 rounded-full border border-gray-300 flex items-center justify-center text-xl font-bold"
+              className="w-9 h-9 rounded-full border border-slate-200 flex items-center justify-center text-xl font-bold text-slate-600 active:bg-slate-100"
             >+</button>
           </div>
         </div>
 
         <button
           onClick={() => { onRemove(entry.id); onClose() }}
-          className="w-full py-3 bg-red-50 text-red-600 rounded-xl font-medium"
+          className="w-full py-3 text-red-500 text-sm font-semibold rounded-xl border border-red-100 bg-red-50 active:bg-red-100"
         >
           Retirer de la collection
         </button>

@@ -1,42 +1,61 @@
 'use client'
 import { useState } from 'react'
+import { ChevronUp, ChevronDown } from 'lucide-react'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { CardTile } from './CardTile'
-import type { CollectionEntry } from '@/types'
+import type { CollectionEntry, Card } from '@/types'
 
 interface SetSectionProps {
   setId: string
   setName: string
-  totalCards: number | null
+  allCards: Card[]
   entries: CollectionEntry[]
   onCardTap: (entry: CollectionEntry) => void
 }
 
-export function SetSection({ setId, setName, totalCards, entries, onCardTap }: SetSectionProps) {
+export function SetSection({ setName, allCards, entries, onCardTap }: SetSectionProps) {
   const [expanded, setExpanded] = useState(true)
+
+  const ownedMap = new Map(entries.map(e => [e.card_id, e]))
   const count = entries.length
-  const total = totalCards ?? '?'
-  const percent = totalCards ? Math.round((count / totalCards) * 100) : 0
+  const total = allCards.length || '?'
+  const percent = allCards.length ? Math.round((count / allCards.length) * 100) : 0
+  const totalValue = entries.reduce((sum, e) => sum + (e.card?.market_price ?? 0) * e.quantity, 0)
 
   return (
-    <section className="mb-6">
+    <section className="mb-2">
       <button
         onClick={() => setExpanded(e => !e)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100"
+        className="w-full flex items-center justify-between px-4 py-3 bg-white border-b border-slate-100"
       >
         <div className="text-left">
-          <h2 className="font-semibold text-gray-900">{setName}</h2>
-          <p className="text-xs text-gray-500">{count}/{total} · {percent}%</p>
+          <h2 className="font-bold text-slate-900">{setName}</h2>
+          <p className="text-xs text-slate-400">{count}/{total} · {percent}%</p>
         </div>
-        <span className="text-gray-400">{expanded ? '▲' : '▼'}</span>
+        <div className="flex items-center gap-2">
+          {totalValue > 0 && (
+            <span className="text-sm font-semibold text-green-500">
+              ${totalValue.toFixed(2)}
+            </span>
+          )}
+          {expanded
+            ? <ChevronUp size={16} className="text-slate-300" />
+            : <ChevronDown size={16} className="text-slate-300" />
+          }
+        </div>
       </button>
 
       {expanded && (
         <>
           <ProgressBar value={percent} className="mx-4 my-2" />
-          <div className="grid grid-cols-3 gap-2 px-4 mt-3 md:grid-cols-5">
-            {entries.map(entry => (
-              <CardTile key={entry.id} entry={entry} onTap={onCardTap} />
+          <div className="grid grid-cols-4 gap-1.5 px-4 mt-2 pb-3 md:grid-cols-6">
+            {allCards.map(card => (
+              <CardTile
+                key={card.id}
+                card={card}
+                entry={ownedMap.get(card.id)}
+                onTap={onCardTap}
+              />
             ))}
           </div>
         </>

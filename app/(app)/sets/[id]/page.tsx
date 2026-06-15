@@ -1,71 +1,102 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
+import { ArrowLeft } from 'lucide-react'
 import { useCollection } from '@/hooks/useCollection'
+import { getCardsBySet } from '@/lib/tcgdex'
+import { ProgressBar } from '@/components/ui/ProgressBar'
+import { CardDetailModal } from '@/components/collection/CardDetailModal'
 import type { Card, CollectionEntry } from '@/types'
 
 export default function SetDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const router = useRouter()
   const [allCards, setAllCards] = useState<Card[]>([])
   const [loading, setLoading] = useState(true)
-  const { entries, loadCollection } = useCollection()
+  const [selectedEntry, setSelectedEntry] = useState<CollectionEntry | null>(null)
+  const { entries, loadCollection, updateQuantity, removeCard } = useCollection()
 
   useEffect(() => {
     async function load() {
       await loadCollection()
-      const res = await fetch(`https://api.tcgdex.net/v2/en/sets/${id}/cards`)
-      if (res.ok) {
-        const data = await res.json()
-        setAllCards(data)
-      }
+      const cards = await getCardsBySet(id)
+      setAllCards(cards)
       setLoading(false)
     }
     load()
   }, [id])
 
-  const ownedIds = new Set(entries.map(e => e.card_id))
-  const ownedEntryMap = entries.reduce<Record<string, CollectionEntry>>((acc, e) => {
-    acc[e.card_id] = e
-    return acc
-  }, {})
-  const ownedCount = allCards.filter(c => ownedIds.has(c.id)).length
-
-  if (loading) {
-    return <div className="flex items-center justify-center h-64 text-gray-500">Chargement...</div>
-  }
+  const setEntries = entries.filter(e => (e.card?.set_id ?? e.card_id.split('-')[0]) === id)
+  const ownedMap = new Map(setEntries.map(e => [e.card_id, e]))
+  const ownedCount = allCards.filter(c => ownedMap.has(c.id)).length
+  const percent = allCards.length ? Math.round((ownedCount / allCards.length) * 100) : 0
 
   return (
-    <div>
-      <div className="px-4 py-4 border-b border-gray-100">
-        <h1 className="text-xl font-bold">{id}</h1>
-        <p className="text-sm text-gray-500">{ownedCount}/{allCards.length}</p>
+    <div className="min-h-screen bg-slate-50">
+      <div className="sticky top-0 bg-white border-b border-slate-100 z-10">
+        <div className="px-4 pt-4 pb-3">
+          <button
+            onClick={() => router.back()}
+            className="flex items-center gap-1.5 text-indigo-500 text-sm font-semibold mb-3"
+          >
+            <ArrowLeft size={16} strokeWidth={2.5} />
+            Retour
+          </button>
+          <h1 className="font-bold text-slate-900 text-lg">{id}</h1>
+          <p className="text-xs text-slate-400 mt-0.5 mb-2">
+            {loading ? '...' : `${ownedCount}/${allCards.length} · ${percent}%`}
+          </p>
+          {!loading && <ProgressBar value={percent} thick />}
+        </div>
       </div>
-      <div className="grid grid-cols-3 gap-2 p-4 md:grid-cols-5">
-        {allCards.map((card: Card) => {
-          const owned = ownedIds.has(card.id)
-          return (
-            <div
-              key={card.id}
-              className={`relative aspect-[2/3] rounded-xl overflow-hidden border ${
-                owned ? 'border-blue-400' : 'border-gray-200 opacity-40 grayscale'
-              }`}
-            >
-              {card.image_url ? (
-                <img src={card.image_url} alt={card.name} className="w-full h-full object-cover" loading="lazy" />
-              ) : (
-                <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-400 text-xs p-1 text-center">
-                  {card.id}
-                </div>
-              )}
-              {owned && (ownedEntryMap[card.id]?.quantity ?? 0) > 1 && (
-                <span className="absolute top-1 right-1 bg-blue-600 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
-                  {ownedEntryMap[card.id].quantity}
-                </span>
-              )}
-            </div>
-          )
-        })}
-      </div>
+
+      {loading ? (
+        <div className="grid grid-cols-4 gap-1.5 p-4 md:grid-cols-6">
+          {Array.from({ length: 16 }).map((_, i) => (
+            <div key={i} className="aspect-2/3 bg-slate-200 rounded-lg animate-pulse" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-4 gap-1.5 p-4 pb-24 md:grid-cols-6">
+          {allCards.map(card => {
+            const entry = ownedMap.get(card.id)
+            const owned = !!entry
+            return (
+              <button
+                key={card.id}
+                onClick={() => entry && setSelectedEntry(entry)}
+                className={`relative aspect-2/3 rounded-lg overflow-hidden border transition-all ${
+                  owned
+                    ? 'border-indigo-300 shadow-sm active:scale-95'
+                    : 'border-slate-200 opacity-40 grayscale cursor-default'
+                }`}
+              >
+                {card.image_url ? (
+                  <img src={card.image_url} alt={card.name} className="w-full h-full object-cover" loading="lazy" />
+                ) : (
+                  <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-400 text-[10px] p-1 text-center">
+                    {card.id}
+                  </div>
+                )}
+                {owned && (entry.quantity ?? 0) > 1 && (
+                  <span className="absolute top-1 right-1 bg-indigo-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
+                    {entry.quantity}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {selectedEntry && (
+        <CardDetailModal
+          entry={selectedEntry}
+          onClose={() => setSelectedEntry(null)}
+          onUpdateQuantity={updateQuantity}
+          onRemove={removeCard}
+        />
+      )}
     </div>
   )
 }
