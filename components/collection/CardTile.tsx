@@ -13,7 +13,7 @@ export function CardTile({ card, entry, onTap }: CardTileProps) {
     <button
       onClick={() => entry && onTap(entry)}
       disabled={!owned}
-      className={`relative aspect-2/3 rounded-xl overflow-hidden transition-colors ${
+      className={`relative aspect-2/3 rounded-xl overflow-hidden transition-all active:scale-95 ${
         owned
           ? 'border border-slate-200 hover:border-indigo-400 cursor-pointer bg-slate-100'
           : 'border border-dashed border-slate-200 cursor-default bg-slate-50'

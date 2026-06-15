@@ -6,14 +6,14 @@ import { useCollection } from '@/hooks/useCollection'
 import { getCardsBySet } from '@/lib/optcgapi'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { CardDetailModal } from '@/components/collection/CardDetailModal'
-import type { Card, CollectionEntry } from '@/types'
+import type { Card } from '@/types'
 
 export default function SetDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const [allCards, setAllCards] = useState<Card[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedEntry, setSelectedEntry] = useState<CollectionEntry | null>(null)
+  const [selectedCard, setSelectedCard] = useState<Card | null>(null)
   const { entries, loadCollection, updateQuantity, removeCard } = useCollection()
 
   useEffect(() => {
@@ -30,6 +30,8 @@ export default function SetDetailPage() {
   const ownedMap = new Map(setEntries.map(e => [e.card_id, e]))
   const ownedCount = allCards.filter(c => ownedMap.has(c.id)).length
   const percent = allCards.length ? Math.round((ownedCount / allCards.length) * 100) : 0
+
+  const liveEntry = selectedCard ? (entries.find(e => e.card_id === selectedCard.id) ?? undefined) : undefined
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -58,17 +60,18 @@ export default function SetDetailPage() {
         </div>
       ) : (
         <div className="grid grid-cols-4 gap-1.5 p-4 pb-24 md:grid-cols-6">
-          {allCards.map(card => {
+          {allCards.map((card, i) => {
             const entry = ownedMap.get(card.id)
             const owned = !!entry
             return (
               <button
                 key={card.id}
-                onClick={() => entry && setSelectedEntry(entry)}
-                className={`relative aspect-2/3 rounded-lg overflow-hidden border transition-all ${
+                style={{ animationDelay: `${Math.min(i * 20, 500)}ms` }}
+                onClick={() => setSelectedCard(card)}
+                className={`animate-fade-in-up group relative aspect-2/3 rounded-lg overflow-hidden border transition-all active:scale-95 ${
                   owned
-                    ? 'border-indigo-300 shadow-sm active:scale-95'
-                    : 'border-slate-200 opacity-40 grayscale cursor-default'
+                    ? 'border-indigo-300 shadow-sm'
+                    : 'border-slate-200 opacity-40 grayscale'
                 }`}
               >
                 {card.image_url ? (
@@ -78,8 +81,15 @@ export default function SetDetailPage() {
                     {card.id}
                   </div>
                 )}
-                {owned && (entry.quantity ?? 0) > 1 && (
-                  <span className="absolute top-1 right-1 bg-indigo-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
+                {/* Overlay prix au survol */}
+                {card.market_price && (
+                  <div className="absolute inset-x-0 bottom-0 bg-black/60 py-0.5 text-white text-[9px] font-bold text-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    ${card.market_price.toFixed(2)}
+                  </div>
+                )}
+                {/* Badge quantité */}
+                {owned && (
+                  <span className="absolute top-1 right-1 bg-indigo-500 text-white text-[10px] min-w-4 h-4 px-0.5 rounded-full flex items-center justify-center font-bold">
                     {entry.quantity}
                   </span>
                 )}
@@ -89,17 +99,15 @@ export default function SetDetailPage() {
         </div>
       )}
 
-      {selectedEntry && (() => {
-        const liveEntry = entries.find(e => e.id === selectedEntry.id) ?? selectedEntry
-        return (
-          <CardDetailModal
-            entry={liveEntry}
-            onClose={() => setSelectedEntry(null)}
-            onUpdateQuantity={updateQuantity}
-            onRemove={removeCard}
-          />
-        )
-      })()}
+      {selectedCard && (
+        <CardDetailModal
+          card={selectedCard}
+          entry={liveEntry}
+          onClose={() => setSelectedCard(null)}
+          onUpdateQuantity={liveEntry ? updateQuantity : undefined}
+          onRemove={liveEntry ? removeCard : undefined}
+        />
+      )}
     </div>
   )
 }

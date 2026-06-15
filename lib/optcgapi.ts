@@ -29,9 +29,11 @@ function normalizeSetId(id: string): string {
   return id.replace('-', '')
 }
 
-// "OP01" → "OP-01"
+// "OP01" → "OP-01", "OP15EB04" → "OP15-EB04"
 function toApiSetId(id: string): string {
-  return id.replace(/^([A-Z]+)(\d+)$/, '$1-$2')
+  return id
+    .replace(/^([A-Z]+\d+)([A-Z]+\d+)$/, '$1-$2')
+    .replace(/^([A-Z]+)(\d+)$/, '$1-$2')
 }
 
 function mapEntry(e: OptcgCard): Card {
@@ -135,6 +137,14 @@ export async function getCardsBySet(setId: string): Promise<Card[]> {
 export async function getSetCardCount(setId: string): Promise<number> {
   const cards = await getCardsBySet(setId)
   return cards.length
+}
+
+export async function getSetCoverImage(setId: string): Promise<string | null> {
+  const cards = await getCardsBySet(setId)
+  const own = cards
+    .filter(c => c.set_id === setId)
+    .sort((a, b) => (a.card_number ?? 999) - (b.card_number ?? 999))
+  return own[0]?.image_url ?? null
 }
 
 export async function fetchPriceFromApi(cardId: string): Promise<PriceData | null> {

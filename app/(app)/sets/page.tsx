@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { getSets, getSetCardCount } from '@/lib/optcgapi'
+import { getSets, getSetCardCount, getSetCoverImage } from '@/lib/optcgapi'
 import { useCollection } from '@/hooks/useCollection'
 import { SetList } from '@/components/sets/SetList'
 import type { Set } from '@/types'
@@ -9,6 +9,7 @@ export default function SetsPage() {
   const [sets, setSets] = useState<Set[]>([])
   const [loading, setLoading] = useState(true)
   const [setTotals, setSetTotals] = useState<Record<string, number>>({})
+  const [coverImages, setCoverImages] = useState<Record<string, string>>({})
   const { entries, loadCollection } = useCollection()
 
   useEffect(() => {
@@ -20,10 +21,12 @@ export default function SetsPage() {
       setSets(sorted)
       setLoading(false)
 
-      // Charge les totaux en parallèle en arrière-plan
       sorted.forEach(set => {
         getSetCardCount(set.id).then(count => {
           setSetTotals(prev => ({ ...prev, [set.id]: count }))
+        })
+        getSetCoverImage(set.id).then(url => {
+          if (url) setCoverImages(prev => ({ ...prev, [set.id]: url }))
         })
       })
     }
@@ -61,7 +64,7 @@ export default function SetsPage() {
         </div>
       ) : (
         <div className="pb-24">
-          <SetList sets={enrichedSets} collectionCounts={collectionCounts} />
+          <SetList sets={enrichedSets} collectionCounts={collectionCounts} coverImages={coverImages} />
         </div>
       )}
     </div>

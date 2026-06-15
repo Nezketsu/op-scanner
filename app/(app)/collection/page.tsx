@@ -2,6 +2,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Search, SlidersHorizontal } from 'lucide-react'
 import { useCollection } from '@/hooks/useCollection'
+import { getSetCardCount } from '@/lib/optcgapi'
 import { SetSection } from '@/components/collection/SetSection'
 import { CardDetailModal } from '@/components/collection/CardDetailModal'
 import { filterEntries, sortEntries, getRarities } from '@/lib/collection-filters'
@@ -21,6 +22,7 @@ export default function CollectionPage() {
   const [search, setSearch] = useState('')
   const [rarityFilter, setRarityFilter] = useState<string | null>(null)
   const [sort, setSort] = useState<SortKey>('number')
+  const [setTotals, setSetTotals] = useState<Record<string, number>>({})
 
   useEffect(() => { loadCollection() }, [loadCollection])
 
@@ -33,7 +35,22 @@ export default function CollectionPage() {
     }, {})
   }, [entries])
 
+  useEffect(() => {
+    Object.keys(bySet).forEach(setId => {
+      if (setTotals[setId] !== undefined) return
+      getSetCardCount(setId).then(count => {
+        setSetTotals(prev => ({ ...prev, [setId]: count }))
+      })
+    })
+  }, [bySet])
+
   const rarities = useMemo(() => getRarities(entries), [entries])
+
+  const totalStats = useMemo(() => ({
+    cards: entries.reduce((sum, e) => sum + e.quantity, 0),
+    sets: Object.keys(bySet).length,
+    value: entries.reduce((sum, e) => sum + (e.card?.market_price ?? 0) * e.quantity, 0),
+  }), [entries, bySet])
 
   const filteredBySet = useMemo(() => {
     const result: Record<string, CollectionEntry[]> = {}
@@ -116,7 +133,7 @@ export default function CollectionPage() {
           {[1, 2].map(i => (
             <div key={i} className="animate-pulse">
               <div className="h-14 bg-white rounded-t-xl border border-slate-100" />
-              <div className="grid grid-cols-4 gap-1.5 p-4 bg-white border border-t-0 border-slate-100 rounded-b-xl">
+              <div className="grid grid-cols-3 gap-1.5 p-4 bg-white border border-t-0 border-slate-100 rounded-b-xl">
                 {Array.from({ length: 8 }).map((_, j) => (
                   <div key={j} className="aspect-2/3 bg-slate-200 rounded-lg" />
                 ))}
@@ -136,6 +153,22 @@ export default function CollectionPage() {
         </div>
       ) : (
         <div className="pb-24">
+          {totalStats.cards > 0 && (
+            <div className="mx-4 mt-4 mb-2 bg-white rounded-2xl flex divide-x divide-slate-100 border border-slate-100 shadow-sm overflow-hidden">
+              <div className="flex-1 flex flex-col items-center py-3">
+                <span className="text-xl font-black text-slate-900">{totalStats.cards}</span>
+                <span className="text-[10px] text-slate-400 mt-0.5">cartes</span>
+              </div>
+              <div className="flex-1 flex flex-col items-center py-3">
+                <span className="text-xl font-black text-slate-900">{totalStats.sets}</span>
+                <span className="text-[10px] text-slate-400 mt-0.5">sets</span>
+              </div>
+              <div className="flex-1 flex flex-col items-center py-3">
+                <span className="text-xl font-black text-emerald-500">${totalStats.value.toFixed(2)}</span>
+                <span className="text-[10px] text-slate-400 mt-0.5">valeur</span>
+              </div>
+            </div>
+          )}
           {Object.entries(filteredBySet).map(([setId, setEntries]) => {
             const seen = new Set<string>()
             const ownedCards = setEntries
@@ -149,6 +182,7 @@ export default function CollectionPage() {
                 allCards={ownedCards}
                 entries={setEntries}
                 onCardTap={setSelectedEntry}
+                totalInSet={setTotals[setId]}
               />
             )
           })}
@@ -159,6 +193,7 @@ export default function CollectionPage() {
         const liveEntry = entries.find(e => e.id === selectedEntry.id) ?? selectedEntry
         return (
           <CardDetailModal
+            card={liveEntry.card!}
             entry={liveEntry}
             onClose={() => setSelectedEntry(null)}
             onUpdateQuantity={updateQuantity}
