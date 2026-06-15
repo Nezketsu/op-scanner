@@ -5,11 +5,16 @@ interface VariantPickerProps {
   onSelect: (card: Card) => void
 }
 
+function variantLabel(card: Card): string {
+  if (card.id.includes('_p')) return 'Alternate Art'
+  return 'Normal'
+}
+
 export function VariantPicker({ cards, onSelect }: VariantPickerProps) {
   return (
     <div>
       <p className="text-center text-sm text-slate-500 mb-4 font-medium">
-        Quelle version de la carte possèdes-tu ?
+        Quelle version possèdes-tu ?
       </p>
       <div className="grid grid-cols-2 gap-3">
         {cards.map(card => (
@@ -29,10 +34,12 @@ export function VariantPicker({ cards, onSelect }: VariantPickerProps) {
                 Pas d'image
               </div>
             )}
-            <span className="text-xs text-center font-semibold text-slate-700">{card.name}</span>
-            {card.rarity && (
-              <span className="text-xs text-slate-400">{card.rarity}</span>
-            )}
+            <div className="flex flex-col items-center gap-1">
+              <span className="text-xs font-bold text-slate-800">{variantLabel(card)}</span>
+              {card.market_price && (
+                <span className="text-xs font-semibold text-green-500">${card.market_price.toFixed(2)}</span>
+              )}
+            </div>
           </button>
         ))}
       </div>

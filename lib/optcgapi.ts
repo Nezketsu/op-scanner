@@ -34,16 +34,23 @@ function toApiSetId(id: string): string {
   return id.replace(/^([A-Z]+)(\d+)$/, '$1-$2')
 }
 
+function mapEntry(e: OptcgCard): Card {
+  return {
+    id: e.card_image_id,
+    set_id: normalizeSetId(e.set_id),
+    card_number: parseInt(e.card_set_id.split('-')[1], 10) || null,
+    name: e.card_name,
+    image_url: e.card_image,
+    rarity: e.rarity ?? null,
+    variants: null,
+    market_price: e.market_price ?? null,
+    price_source: e.market_price ? 'tcgapi' : null,
+    price_updated_at: e.date_scraped ?? null,
+  }
+}
+
 function groupIntoCard(entries: OptcgCard[]): Card {
   const base = entries[0]
-  const variants: Variant[] = entries.length > 1
-    ? entries.map(e => ({
-        id: e.card_image_id,
-        name: e.card_image_id.includes('_p') ? 'Parallèle' : 'Normal',
-        image_url: e.card_image,
-      }))
-    : null as unknown as Variant[]
-
   return {
     id: base.card_set_id,
     set_id: normalizeSetId(base.set_id),
@@ -51,7 +58,7 @@ function groupIntoCard(entries: OptcgCard[]): Card {
     name: base.card_name,
     image_url: base.card_image,
     rarity: base.rarity ?? null,
-    variants: entries.length > 1 ? variants : null,
+    variants: null,
     market_price: base.market_price ?? null,
     price_source: base.market_price ? 'tcgapi' : null,
     price_updated_at: base.date_scraped ?? null,
@@ -66,8 +73,8 @@ export async function getCardsByNumber(setId: string, cardNumber: string): Promi
     if (!res.ok) return []
     const data: OptcgCard[] = await res.json()
     if (!data.length) return []
-    // Group normal + parallel as variants of the same card
-    return [groupIntoCard(data)]
+    // Une carte par variante → VariantPicker si plusieurs
+    return data.map(mapEntry)
   } catch {
     return []
   }
