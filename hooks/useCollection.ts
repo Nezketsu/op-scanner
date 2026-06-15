@@ -61,17 +61,26 @@ export function useCollection() {
       return { error: new Error('Carte non insérée en base') }
     }
 
-    // Ajoute à la collection
-    const { error } = await supabase
+    // Vérifie si la carte est déjà dans la collection
+    const { data: existing } = await supabase
       .from('collection')
-      .upsert(
-        { user_id: user.id, card_id: card.id, variant_id: variantId, quantity: 1 },
-        { onConflict: 'user_id,card_id,variant_id', ignoreDuplicates: false }
-      )
+      .select('id, quantity')
+      .eq('user_id', user.id)
+      .eq('card_id', card.id)
+      .is('variant_id', variantId)
+      .maybeSingle()
 
-    if (error) {
-      console.error('Erreur upsert collection:', error)
-      return { error: new Error(error.message || 'Erreur lors de l\'ajout') }
+    if (existing) {
+      const { error } = await supabase
+        .from('collection')
+        .update({ quantity: existing.quantity + 1 })
+        .eq('id', existing.id)
+      if (error) return { error: new Error(error.message) }
+    } else {
+      const { error } = await supabase
+        .from('collection')
+        .insert({ user_id: user.id, card_id: card.id, variant_id: variantId, quantity: 1 })
+      if (error) return { error: new Error(error.message) }
     }
 
     await loadCollection()

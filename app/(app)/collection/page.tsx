@@ -2,11 +2,10 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Search, SlidersHorizontal } from 'lucide-react'
 import { useCollection } from '@/hooks/useCollection'
-import { getCardsBySet } from '@/lib/tcgdex'
 import { SetSection } from '@/components/collection/SetSection'
 import { CardDetailModal } from '@/components/collection/CardDetailModal'
 import { filterEntries, sortEntries, getRarities } from '@/lib/collection-filters'
-import type { CollectionEntry, Card } from '@/types'
+import type { CollectionEntry } from '@/types'
 import type { SortKey } from '@/lib/collection-filters'
 
 const SORT_LABELS: Record<SortKey, string> = {
@@ -22,7 +21,6 @@ export default function CollectionPage() {
   const [search, setSearch] = useState('')
   const [rarityFilter, setRarityFilter] = useState<string | null>(null)
   const [sort, setSort] = useState<SortKey>('number')
-  const [allCardsBySet, setAllCardsBySet] = useState<Record<string, Card[]>>({})
 
   useEffect(() => { loadCollection() }, [loadCollection])
 
@@ -34,19 +32,6 @@ export default function CollectionPage() {
       return acc
     }, {})
   }, [entries])
-
-  useEffect(() => {
-    const setIds = Object.keys(bySet)
-    const missing = setIds.filter(id => !allCardsBySet[id])
-    if (!missing.length) return
-    Promise.all(missing.map(id => getCardsBySet(id).then(cards => ({ id, cards })))).then(results => {
-      setAllCardsBySet(prev => {
-        const next = { ...prev }
-        for (const { id, cards } of results) next[id] = cards
-        return next
-      })
-    })
-  }, [bySet])
 
   const rarities = useMemo(() => getRarities(entries), [entries])
 
@@ -151,16 +136,22 @@ export default function CollectionPage() {
         </div>
       ) : (
         <div className="pb-24">
-          {Object.entries(filteredBySet).map(([setId, setEntries]) => (
-            <SetSection
-              key={setId}
-              setId={setId}
-              setName={setEntries[0]?.card?.set_id ?? setId}
-              allCards={allCardsBySet[setId] ?? []}
-              entries={setEntries}
-              onCardTap={setSelectedEntry}
-            />
-          ))}
+          {Object.entries(filteredBySet).map(([setId, setEntries]) => {
+            const seen = new Set<string>()
+            const ownedCards = setEntries
+              .map(e => e.card)
+              .filter((c): c is NonNullable<CollectionEntry['card']> => !!c && !seen.has(c.id) && !!seen.add(c.id))
+            return (
+              <SetSection
+                key={setId}
+                setId={setId}
+                setName={setEntries[0]?.card?.set_id ?? setId}
+                allCards={ownedCards}
+                entries={setEntries}
+                onCardTap={setSelectedEntry}
+              />
+            )
+          })}
         </div>
       )}
 
