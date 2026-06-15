@@ -1,4 +1,4 @@
-import type { Card, Set, Variant, PriceData } from '@/types'
+import type { Card, Set, PriceData } from '@/types'
 
 const BASE_URL = 'https://optcgapi.com/api'
 
@@ -122,13 +122,9 @@ export async function getCardsBySet(setId: string): Promise<Card[]> {
     const res = await fetch(`${BASE_URL}/sets/filtered/?set_id=${apiId}`)
     if (!res.ok) return []
     const data: OptcgCard[] = await res.json()
-    const grouped = new Map<string, OptcgCard[]>()
-    for (const card of data) {
-      const key = card.card_set_id
-      if (!grouped.has(key)) grouped.set(key, [])
-      grouped.get(key)!.push(card)
-    }
-    const cards = Array.from(grouped.values()).map(groupIntoCard)
+    // Déduplique par card_image_id (l'API peut retourner des doublons)
+    const seen = new Set<string>()
+    const cards = data.filter(e => !seen.has(e.card_image_id) && !!seen.add(e.card_image_id)).map(mapEntry)
     setCardsCache.set(setId, cards)
     return cards
   } catch {
